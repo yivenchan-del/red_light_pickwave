@@ -1,0 +1,9 @@
+picking_filter_system/
+├── db_service/                  # 部署在数据库所在设备（端口建议 8001）
+│   ├── requirements.txt
+│   └── main.py
+├── web_service/                 # 部署在 Web 业务设备（端口建议 8000）
+│   ├── requirements.txt
+│   └── main.py
+└── frontend/                    # 可直接用静态服务器或浏览器打开（推荐用本地 HTTP 服务托管避免跨域/模块限制）
+    └── index.html
