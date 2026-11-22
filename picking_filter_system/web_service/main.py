@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # ================= 配置区（按实际环境修改） =================
-REMOTE_API_URL = os.getenv("REMOTE_API_URL", "https://example.com/api/your-endpoint")
-DB_SERVICE_URL = os.getenv("DB_SERVICE_URL", "http://192.168.1.10:8001")
+REMOTE_API_URL = os.getenv("REMOTE_API_URL", "https://mps.casetify.com/api/shipping_task")
+DB_SERVICE_URL = os.getenv("DB_SERVICE_URL", "http://192.168.201.251:8001")
 INITIAL_TOKEN = os.getenv("REMOTE_API_TOKEN", "")
 MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "10"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "10.0"))
