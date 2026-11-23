@@ -98,6 +98,24 @@ class BatchCheckOut(BaseModel):
 def health():
     return {"status": "ok"}
 
+@app.post("/api/lists/batch-check", response_model=BatchCheckOut)
+def batch_check(payload: BatchCheckIn, db: Session = Depends(get_db)):
+    print(payload)
+    cleaned = list({p.strip() for p in payload.product_nos if p and p.strip()})
+    if not cleaned:
+        return BatchCheckOut(blacklisted=[], whitelisted=[])
+
+    black_rows = db.execute(
+        select(BlacklistItem.product_no).where(BlacklistItem.product_no.in_(cleaned))
+    ).scalars().all()
+    white_rows = db.execute(
+        select(WhitelistItem.product_no).where(WhitelistItem.product_no.in_(cleaned))
+    ).scalars().all()
+
+    return BatchCheckOut(
+        blacklisted=sorted(set(black_rows)),
+        whitelisted=sorted(set(white_rows)),
+    )
 
 @app.get("/api/lists/{list_type}", response_model=list[ListItemOut])
 def list_items(
@@ -181,23 +199,7 @@ def delete_item(
     return {"deleted": True, "id": item_id}
 
 
-@app.post("/api/lists/batch-check", response_model=BatchCheckOut)
-def batch_check(payload: BatchCheckIn, db: Session = Depends(get_db)):
-    cleaned = list({p.strip() for p in payload.product_nos if p and p.strip()})
-    if not cleaned:
-        return BatchCheckOut(blacklisted=[], whitelisted=[])
 
-    black_rows = db.execute(
-        select(BlacklistItem.product_no).where(BlacklistItem.product_no.in_(cleaned))
-    ).scalars().all()
-    white_rows = db.execute(
-        select(WhitelistItem.product_no).where(WhitelistItem.product_no.in_(cleaned))
-    ).scalars().all()
-
-    return BatchCheckOut(
-        blacklisted=sorted(set(black_rows)),
-        whitelisted=sorted(set(white_rows)),
-    )
 
 
 if __name__ == "__main__":

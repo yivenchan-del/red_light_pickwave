@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Product No 筛选与拣货清单工作台</title>
+  <title>红灯非印刷拣货清单</title>
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
   <style>
@@ -177,7 +177,8 @@
     <!-- 分组汇总视图（支持打印与导出 XLSX） -->
     <div class="card" v-if="filterResult">
       <div class="print-only-header">
-        <h2>拣货清单 - 按 {{ activeView === 'product_no' ? 'product_no' : 'sku_no' }} 分组</h2>
+        <!-- <h1>红灯非印刷拣货清单 - 按 {{ activeView === 'product_no' ? '产品编号' : 'SKU' }} 分组</h1> -->
+        <h1>红灯非印刷拣货清单</h1>
         <div>打印时间：{{ new Date().toLocaleString() }}</div>
       </div>
 
@@ -187,13 +188,13 @@
             :class="['outline', activeView === 'product_no' ? 'active' : '']"
             @click="activeView = 'product_no'"
           >
-            product_no 分组视图 ({{ filterResult.by_product_no.length }})
+             产品编号分组视图 ({{ filterResult.by_product_no.length }})
           </button>
           <button
             :class="['outline', activeView === 'sku_no' ? 'active' : '']"
             @click="activeView = 'sku_no'"
           >
-            sku_no 分组视图 ({{ filterResult.by_sku_no.length }})
+            SKU 分组视图 ({{ filterResult.by_sku_no.length }})
           </button>
         </div>
         <div class="row">
@@ -205,22 +206,22 @@
       <table>
         <thead>
           <tr>
-            <th style="width: 60px;">序号</th>
-            <th>{{ activeView === 'product_no' ? 'product_no' : 'sku_no' }}</th>
-            <th>product_no</th>
-            <th>sku_no</th>
-            <th style="width: 100px;">命中条数</th>
-            <th>关联 barcode</th>
+            <!-- <th style="width: 60px;">序号</th> -->
+            <th style="width: 100px;">数量</th>
+            <th>{{ activeView === 'sku_no' ? 'SKU' : '产品编号' }}</th>
+            <th>CTF</th>
+            <th>描述</th>
+            <!-- <th>关联</th> -->
           </tr>
         </thead>
         <tbody>
           <tr v-for="(item, index) in currentGroupRows" :key="item.group_key + '_' + index">
-            <td>{{ index + 1 }}</td>
-            <td><b>{{ item.group_key }}</b></td>
-            <td>{{ item.product_no || '-' }}</td>
-            <td>{{ item.sku_no || '-' }}</td>
+            <!-- <td>{{ index + 1 }}</td> -->
             <td>{{ item.hit_count }}</td>
-            <td>{{ item.barcodes.join(', ') }}</td>
+            <td><b>{{ item.group_key }}</b></td>
+            <td>{{ item.product_no || '-' }}-{{item.extra_fields?.order_item?.artwork_code}}</td>
+            <td>{{ item.extra_fields?.product?.desc || '-' }}</td>
+            <!-- <td>{{ item.barcodes.join(', ') }}</td> -->
           </tr>
           <tr v-if="currentGroupRows.length === 0">
             <td colspan="6" style="text-align:center; color:#6b7280;">暂无符合条件的分组数据</td>
@@ -243,7 +244,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in filterResult.records" :key="r.barcode">
+          <tr v-for="r in filterResult.records" :key="`${r.barcode}_${r.item_index}`">
             <td>{{ r.barcode }}</td>
             <td>
               <span :class="['tag', r.status === 'accepted' ? 'tag-ok' : (r.status === 'rejected' ? 'tag-rej' : 'tag-err')]">
@@ -304,7 +305,7 @@
     createApp({
       setup() {
         const webBaseUrl = ref("http://127.0.0.1:8000");
-        const dbBaseUrl = ref("http://127.0.0.1:8001");
+        const dbBaseUrl = ref("http://192.168.201.251:8001");
 
         const tokenInput = ref("");
         const tokenStatus = reactive({ configured: false, masked_token: "未设置" });
@@ -488,7 +489,7 @@
         const exportCurrentViewXlsx = () => {
           const rows = currentGroupRows.value.map((item, idx) => ({
             序号: idx + 1,
-            分组维度: activeView.value,
+            分组: activeView.value,
             分组键: item.group_key,
             product_no: item.product_no || "",
             sku_no: item.sku_no || "",

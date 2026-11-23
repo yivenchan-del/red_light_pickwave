@@ -6,16 +6,28 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from pathlib import Path
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 # ================= 配置区（按实际环境修改） =================
 REMOTE_API_URL = os.getenv("REMOTE_API_URL", "https://mps.casetify.com/api/shipping_task")
 DB_SERVICE_URL = os.getenv("DB_SERVICE_URL", "http://192.168.201.251:8001")
 INITIAL_TOKEN = os.getenv("REMOTE_API_TOKEN", "")
 MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "10"))
-REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "10.0"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "10"))
 # ==========================================================
+FRONTEND_DIR = Path(
+    os.getenv("FRONTEND_DIR", Path(__file__).resolve().parent.parent / "forntend")
+)
+
+
 
 app = FastAPI(title="Product Filter Web Service", version="1.0.0")
+
+if FRONTEND_DIR.exists():
+    # 如果后续有独立的 js/css/图片资源，可挂载到 /static
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,13 +56,13 @@ class ScanFilterIn(BaseModel):
 
 class RawRecordOut(BaseModel):
     barcode: str
+    item_index: int = 1  # 单个 barcode 响应下的第几条子记录（从 1 开始）
     status: str  # accepted | rejected | error
     reason: str
     product_no: str | None = None
     sku_no: str | None = None
     non_print_sku_active: bool = False
     extra_fields: dict[str, Any] = Field(default_factory=dict)
-
 
 class GroupSummaryOut(BaseModel):
     group_key: str
@@ -71,6 +83,57 @@ class ScanFilterOut(BaseModel):
     by_product_no: list[GroupSummaryOut]
     by_sku_no: list[GroupSummaryOut]
 
+def extract_remote_candidates(payload: Any) -> list[dict[str, Any]]:
+    """
+    从远程 API 响应中提取多条候选项记录。
+    具体 JSON 层级（如 data.list / data.items / rows 等）请在此按实际结构调整。
+    """
+    if not isinstance(payload, dict):
+        return []
+    # print(payload)
+    data = payload.get('shipping_task')[0]
+    if isinstance(data, list):
+        raw_items = data
+    elif isinstance(data, dict):
+        # 常见多条列表字段名可在此兼容，例如 items / list / rows / records
+        for key in ("delivery_items", "list", "rows", "records", "details"):
+            if isinstance(data.get(key), list):
+                raw_items = data[key]
+                break
+        else:
+            raw_items = [data]
+    else:
+        raw_items = []
+
+    excluded_keys = {"non_print_sku", "product_no", "sku_no"}
+    candidates: list[dict[str, Any]] = []
+
+    for row in raw_items:
+        if not isinstance(row, dict):
+            continue
+        if isinstance(row.get("non_print_sku"),list):
+            non_print_sku = row.get("non_print_sku")[0]
+        else:
+            non_print_sku = None
+        product_no = row.get("product").get('product_no','')
+        # desc = row.get("product").get('desc','')
+        
+        sku_no = row.get('sku').get("sku_no")
+        extra_fields = {k: v for k, v in row.items() if k not in excluded_keys}
+        print('cancelled',row.get('cancelled'))
+        if row.get('cancelled') == True:
+            continue
+        candidates.append({
+            "non_print_sku": non_print_sku,
+            "product_no": str(product_no).strip() if product_no is not None and str(product_no).strip() else None,
+            "sku_no": str(sku_no).strip() if sku_no is not None and str(sku_no).strip() else None,
+            # "desc": desc,
+            "extra_fields": extra_fields,
+        })
+
+    return candidates
+
+
 
 def extract_remote_fields(payload: Any) -> dict[str, Any]:
     """
@@ -87,7 +150,7 @@ def extract_remote_fields(payload: Any) -> dict[str, Any]:
 
     # 若响应外层包了 data，可在此兼容，例如：
     # data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
-    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    data = payload.get("shipping_task")[0] if isinstance(payload.get("shipping_task")[0], dict) else payload
 
     non_print_sku = data.get("non_print_sku")
     product_no = data.get("product_no")
@@ -135,15 +198,15 @@ async def fetch_single_barcode(
 async def query_db_lists(product_nos: list[str]) -> tuple[set[str], set[str]]:
     if not product_nos:
         return set(), set()
+
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         resp = await client.post(
             f"{DB_SERVICE_URL.rstrip('/')}/api/lists/batch-check",
-            json={"product_nos": product_nos},
+            json={"product_nos":product_nos},
         )
         resp.raise_for_status()
         body = resp.json()
         return set(body.get("blacklisted", [])), set(body.get("whitelisted", []))
-
 
 def build_groups(accepted_records: list[RawRecordOut], group_field: str) -> list[GroupSummaryOut]:
     grouped: dict[str, dict[str, Any]] = {}
@@ -162,9 +225,11 @@ def build_groups(accepted_records: list[RawRecordOut], group_field: str) -> list
                 "extra_fields": rec.extra_fields,
             }
         grouped[key]["hit_count"] += 1
-        grouped[key]["barcodes"].append(rec.barcode)
+        if rec.barcode not in grouped[key]["barcodes"]:
+            grouped[key]["barcodes"].append(rec.barcode)
 
     return [GroupSummaryOut(**v) for v in grouped.values()]
+
 
 
 @app.get("/health")
@@ -207,32 +272,30 @@ async def run_filter(payload: ScanFilterIn):
         ]
         api_results = await asyncio.gather(*tasks)
 
-    parsed_items: list[dict[str, Any]] = []
+    parsed_entries: list[dict[str, Any]] = []
     candidate_product_nos: list[str] = []
 
     for bc, api_res in zip(unique_barcodes, api_results):
         if not api_res["ok"]:
-            parsed_items.append({
+            parsed_entries.append({
                 "barcode": bc,
                 "api_ok": False,
                 "api_error": api_res["error"],
+                "candidates": [],
             })
             continue
 
-        extracted = extract_remote_fields(api_res["data"])
-        non_print_active = is_non_print_sku_true(extracted["non_print_sku"])
-        p_no = extracted["product_no"]
+        candidates = extract_remote_candidates(api_res["data"])
+        for c in candidates:
+            active = is_non_print_sku_true(c["non_print_sku"])
+            c["non_print_sku_active"] = active
+            if active and c["product_no"]:
+                candidate_product_nos.append(c["product_no"])
 
-        if non_print_active and p_no:
-            candidate_product_nos.append(p_no)
-
-        parsed_items.append({
+        parsed_entries.append({
             "barcode": bc,
             "api_ok": True,
-            "non_print_sku_active": non_print_active,
-            "product_no": p_no,
-            "sku_no": extracted["sku_no"],
-            "extra_fields": extracted["extra_fields"],
+            "candidates": candidates,
         })
 
     try:
@@ -245,80 +308,91 @@ async def run_filter(payload: ScanFilterIn):
     rejected_count = 0
     error_count = 0
 
-    for item in parsed_items:
-        bc = item["barcode"]
-        if not item["api_ok"]:
+    for entry in parsed_entries:
+        bc = entry["barcode"]
+        if not entry["api_ok"]:
             error_count += 1
             records.append(RawRecordOut(
                 barcode=bc,
+                item_index=1,
                 status="error",
-                reason=f"远程API请求失败: {item['api_error']}",
+                reason=f"远程API请求失败: {entry['api_error']}",
             ))
             continue
 
-        if not item["non_print_sku_active"]:
+        if not entry["candidates"]:
             rejected_count += 1
             records.append(RawRecordOut(
                 barcode=bc,
+                item_index=1,
                 status="rejected",
-                reason="non_print_sku 为空或非真",
-                product_no=item["product_no"],
-                sku_no=item["sku_no"],
-                non_print_sku_active=False,
-                extra_fields=item["extra_fields"],
+                reason="远程API未返回有效记录",
             ))
             continue
 
-        p_no = item["product_no"]
-        if not p_no:
-            rejected_count += 1
-            records.append(RawRecordOut(
-                barcode=bc,
-                status="rejected",
-                reason="缺少 product_no",
-                sku_no=item["sku_no"],
-                non_print_sku_active=True,
-                extra_fields=item["extra_fields"],
-            ))
-            continue
+        for idx, c in enumerate(entry["candidates"], start=1):
+            p_no = c["product_no"]
+            if not c["non_print_sku_active"]:
+                rejected_count += 1
+                records.append(RawRecordOut(
+                    barcode=bc,
+                    item_index=idx,
+                    status="rejected",
+                    reason="印刷品",
+                    product_no=p_no,
+                    sku_no=c["sku_no"],
+                    non_print_sku_active=False,
+                    extra_fields=c["extra_fields"],
+                ))
+            elif not p_no:
+                rejected_count += 1
+                records.append(RawRecordOut(
+                    barcode=bc,
+                    item_index=idx,
+                    status="rejected",
+                    reason="缺少 product_no",
+                    sku_no=c["sku_no"],
+                    non_print_sku_active=True,
+                    extra_fields=c["extra_fields"],
+                ))
+            elif p_no in blacklisted_set:
+                rejected_count += 1
+                records.append(RawRecordOut(
+                    barcode=bc,
+                    item_index=idx,
+                    status="rejected",
+                    reason="命中黑名单",
+                    product_no=p_no,
+                    sku_no=c["sku_no"],
+                    non_print_sku_active=True,
+                    extra_fields=c["extra_fields"],
+                ))
+            elif p_no in whitelisted_set:
+                rejected_count += 1
+                records.append(RawRecordOut(
+                    barcode=bc,
+                    item_index=idx,
+                    status="rejected",
+                    reason="命中白名单（按规则不在黑白名单才生效）",
+                    product_no=p_no,
+                    sku_no=c["sku_no"],
+                    non_print_sku_active=True,
+                    extra_fields=c["extra_fields"],
+                ))
+            else:
+                rec = RawRecordOut(
+                    barcode=bc,
+                    item_index=idx,
+                    status="accepted",
+                    reason="非印刷品",
+                    product_no=p_no,
+                    sku_no=c["sku_no"],
+                    non_print_sku_active=True,
+                    extra_fields=c["extra_fields"],
+                )
+                records.append(rec)
+                accepted_records.append(rec)
 
-        if p_no in blacklisted_set:
-            rejected_count += 1
-            records.append(RawRecordOut(
-                barcode=bc,
-                status="rejected",
-                reason="命中黑名单",
-                product_no=p_no,
-                sku_no=item["sku_no"],
-                non_print_sku_active=True,
-                extra_fields=item["extra_fields"],
-            ))
-            continue
-
-        if p_no in whitelisted_set:
-            rejected_count += 1
-            records.append(RawRecordOut(
-                barcode=bc,
-                status="rejected",
-                reason="命中白名单（按规则不在黑白名单才生效）",
-                product_no=p_no,
-                sku_no=item["sku_no"],
-                non_print_sku_active=True,
-                extra_fields=item["extra_fields"],
-            ))
-            continue
-
-        rec = RawRecordOut(
-            barcode=bc,
-            status="accepted",
-            reason="通过",
-            product_no=p_no,
-            sku_no=item["sku_no"],
-            non_print_sku_active=True,
-            extra_fields=item["extra_fields"],
-        )
-        records.append(rec)
-        accepted_records.append(rec)
 
     by_product_no = build_groups(accepted_records, "product_no")
     by_sku_no = build_groups(accepted_records, "sku_no")
@@ -333,6 +407,18 @@ async def run_filter(payload: ScanFilterIn):
         by_product_no=by_product_no,
         by_sku_no=by_sku_no,
     )
+
+
+
+@app.get("/", response_class=HTMLResponse)
+def serve_index():
+    index_file = FRONTEND_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"index.html not found at: {index_file}",
+        )
+    return FileResponse(index_file, media_type="text/html; charset=utf-8")
 
 
 if __name__ == "__main__":
