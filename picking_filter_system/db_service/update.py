@@ -1,3 +1,13 @@
+# 导入黑名单
+curl -X POST "http://<DB设备IP>:8001/api/lists/blacklist/import-csv" \
+  -F "file=@blacklist.csv"
+
+# 导入白名单并覆盖已存在记录的 desc
+curl -X POST "http://<DB设备IP>:8001/api/lists/whitelist/import-csv?overwrite_desc=true" \
+  -F "file=@whitelist.csv"
+
+
+
 import csv
 import io
 from fastapi import File, UploadFile
