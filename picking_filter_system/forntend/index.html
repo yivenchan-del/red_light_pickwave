@@ -10,28 +10,29 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 16px;
+      padding: 14px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
       background: #f5f7fa;
       color: #1f2937;
+      font-size: 14px;
     }
     .container { max-width: 1280px; margin: 0 auto; }
     .card {
       background: #fff;
       border-radius: 8px;
       padding: 16px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     h2, h3 { margin: 0 0 12px; font-size: 16px; }
     input, textarea, select {
       border: 1px solid #d1d5db;
       border-radius: 6px;
       padding: 8px 10px;
       font-size: 14px;
+      max-width: 100%;
     }
     button {
       border: none;
@@ -41,6 +42,7 @@
       cursor: pointer;
       background: #2563eb;
       color: #fff;
+      white-space: nowrap;
     }
     button:hover { background: #1d4ed8; }
     button.secondary { background: #4b5563; }
@@ -58,49 +60,161 @@
       background: #2563eb;
       color: #fff;
     }
-    table {
+
+    .table-wrap {
       width: 100%;
-      border-collapse: collapse;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       margin-top: 10px;
+    }
+    table.picking-table {
+      width: 100%;
+      min-width: 640px;
+      border-collapse: collapse;
+      table-layout: fixed;
       font-size: 13px;
     }
-    th, td {
-      border: 1px solid #e5e7eb;
-      padding: 8px 10px;
+    table.picking-table th,
+    table.picking-table td {
+      border: 1px solid #d1d5db;
+      padding: 7px 8px;
       text-align: left;
-      word-break: break-all;
+      vertical-align: middle;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+      word-break: normal;
     }
-    th { background: #f9fafb; font-weight: 600; }
-    .tag {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
+    table.picking-table th {
+      background: #f3f4f6;
+      font-weight: 600;
+      color: #111827;
     }
-    .tag-ok { background: #d1fae5; color: #065f46; }
-    .tag-rej { background: #fee2e2; color: #991b1b; }
-    .tag-err { background: #fef3c7; color: #92400e; }
-    .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; margin-top: 10px; }
-    .msg { margin-top: 8px; font-size: 13px; color: #2563eb; }
-    .err-msg { color: #dc2626; }
-    .barcode-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .chip {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      color: #1e40af;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 12px;
+    .col-num { width: 58px; text-align: center !important; }
+    .col-sku { width: 24%; }
+    .col-ctf { width: 20%; }
+    .col-desc { width: auto; }
+
+    .print-header, .print-summary, .print-footer { display: none; }
+
+    /* 平板与手机端适配 */
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      .card { padding: 12px; border-radius: 6px; }
+      input, textarea, select { font-size: 16px; } /* 防止手机端输入聚焦放大 */
+      .row > input[type="text"],
+      .row > input[type="password"],
+      .row > input:not([type]) {
+        flex: 1 1 100%;
+        width: 100% !important;
+      }
+      .row > button {
+        flex: 1 1 auto;
+        min-height: 38px;
+      }
+      table.picking-table {
+        min-width: 560px;
+        font-size: 12px;
+      }
+      table.picking-table th,
+      table.picking-table td {
+        padding: 6px;
+      }
     }
 
-    @media print {
-      body { background: #fff; padding: 0; }
-      .no-print { display: none !important; }
-      .card { box-shadow: none; border: none; padding: 0; margin: 0; }
-      .print-only-header { display: block !important; margin-bottom: 12px; }
+    /* A4 打印样式 */
+    @page {
+      size: A4 portrait;
+      margin: 12mm 10mm;
     }
-    .print-only-header { display: none; }
+    @media print {
+      body {
+        background: #fff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 11pt;
+        color: #000 !important;
+      }
+      .container { max-width: 100% !important; }
+      .no-print { display: none !important; }
+      .card {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .table-wrap {
+        overflow: visible !important;
+        margin-top: 6px !important;
+      }
+
+      .print-header {
+        display: block !important;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1.5px solid #000;
+      }
+      .print-title {
+        font-size: 16pt;
+        font-weight: 700;
+        text-align: center;
+        margin: 0 0 6px;
+        letter-spacing: 2px;
+      }
+      .print-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 9.5pt;
+        color: #222;
+      }
+
+      table.picking-table {
+        min-width: 0 !important;
+        width: 100% !important;
+        table-layout: fixed !important;
+        font-size: 9.5pt !important;
+        border-collapse: collapse !important;
+      }
+      table.picking-table thead {
+        display: table-header-group;
+      }
+      table.picking-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      table.picking-table th {
+        background: #eee !important;
+        color: #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        padding: 5px 6px !important;
+      }
+      table.picking-table td {
+        padding: 5px 6px !important;
+        border-color: #333 !important;
+      }
+
+      .print-summary {
+        display: flex !important;
+        justify-content: flex-end;
+        gap: 20px;
+        font-size: 10pt;
+        font-weight: 600;
+        margin-top: 8px;
+      }
+      .print-footer {
+        display: flex !important;
+        justify-content: space-between;
+        font-size: 9.5pt;
+        margin-top: 18px;
+        padding-top: 8px;
+      }
+    }
   </style>
+
+
 </head>
 <body>
   <div id="app" class="container">
@@ -116,7 +230,7 @@
         </label>
         <button class="secondary" @click="checkHealth">检查服务状态</button>
       </div>
-      <div class="row" style="margin-top: 10px;">
+      <!-- <div class="row" style="margin-top: 10px;">
         <input
           v-model="tokenInput"
           type="password"
@@ -127,7 +241,7 @@
         <span style="font-size: 13px; color: #4b5563;">
           当前状态：{{ tokenStatus.configured ? '已配置 (' + tokenStatus.masked_token + ')' : '未配置' }}
         </span>
-      </div>
+      </div> -->
       <div v-if="systemMsg" :class="['msg', systemIsError ? 'err-msg' : '']">{{ systemMsg }}</div>
     </div>
 
@@ -176,59 +290,74 @@
 
     <!-- 分组汇总视图（支持打印与导出 XLSX） -->
     <div class="card" v-if="filterResult">
-      <div class="print-only-header">
-        <!-- <h1>红灯非印刷拣货清单 - 按 {{ activeView === 'product_no' ? '产品编号' : 'SKU' }} 分组</h1> -->
-        <h1>红灯非印刷拣货清单</h1>
-        <div>打印时间：{{ new Date().toLocaleString() }}</div>
+      <!-- 打印专用页眉 -->
+      <div class="print-header">
+        <div class="print-title">红灯非印刷拣货清单</div>
+        <div class="print-meta">
+          <!-- <span>分组维度：{{ activeView === 'product_no' ? 'product_no' : 'sku_no' }}</span> -->
+          <span>打印时间：{{ new Date().toLocaleString() }}</span>
+        </div>
       </div>
 
+      <!-- 屏幕操作栏（打印时隐藏） -->
       <div class="row no-print" style="justify-content: space-between;">
         <div class="row">
           <button
             :class="['outline', activeView === 'product_no' ? 'active' : '']"
             @click="activeView = 'product_no'"
           >
-             产品编号分组视图 ({{ filterResult.by_product_no.length }})
+            product_no 分组 ({{ filterResult.by_product_no.length }})
           </button>
           <button
             :class="['outline', activeView === 'sku_no' ? 'active' : '']"
             @click="activeView = 'sku_no'"
           >
-            SKU 分组视图 ({{ filterResult.by_sku_no.length }})
+            sku_no 分组 ({{ filterResult.by_sku_no.length }})
           </button>
         </div>
         <div class="row">
           <button class="success" @click="exportCurrentViewXlsx">导出当前视图 XLSX</button>
-          <button class="secondary" @click="printCurrentView">打印当前分组清单</button>
+          <button class="secondary" @click="printCurrentView">打印 A4 拣货清单</button>
         </div>
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <!-- <th style="width: 60px;">序号</th> -->
-            <th style="width: 100px;">数量</th>
-            <th>{{ activeView === 'sku_no' ? 'SKU' : '产品编号' }}</th>
-            <th>CTF</th>
-            <th>描述</th>
-            <!-- <th>关联</th> -->
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(item, index) in currentGroupRows" :key="item.group_key + '_' + index">
-            <!-- <td>{{ index + 1 }}</td> -->
-            <td>{{ item.hit_count }}</td>
-            <td><b>{{ item.group_key }}</b></td>
-            <td>{{ item.product_no || '-' }}-{{item.extra_fields?.order_item?.artwork_code}}</td>
-            <td>{{ item.extra_fields?.product?.desc || '-' }}</td>
-            <!-- <td>{{ item.barcodes.join(', ') }}</td> -->
-          </tr>
-          <tr v-if="currentGroupRows.length === 0">
-            <td colspan="6" style="text-align:center; color:#6b7280;">暂无符合条件的分组数据</td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- 拣货清单表格 -->
+      <div class="table-wrap">
+        <table class="picking-table">
+          <thead>
+            <tr>
+              <th class="col-num">数量</th>
+              <th class="col-sku">SKU</th>
+              <th class="col-ctf">CTF</th>
+              <th class="col-desc">描述</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(item, index) in currentGroupRows" :key="item.group_key + '_' + index">
+              <td class="col-num">{{ item.hit_count }}</td>
+              <td class="col-sku">{{ item.sku_no }}</td>
+              <td class="col-ctf">{{item.extra_fields?.order_item?.artwork_code}}-{{ item.product_no || '-' }}</td>
+              <td class="col-desc">{{ item.extra_fields?.product?.desc || '-' }}</td>
+            </tr>
+            <tr v-if="currentGroupRows.length === 0">
+              <td colspan="4" style="text-align:center; color:#6b7280; padding: 14px;">暂无符合条件的拣货数据</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 打印专用统计与签字栏 -->
+      <div class="print-summary">
+        <span>分组行数：{{ currentGroupRows.length }}</span>
+        <span>合计数量：{{ currentGroupRows.reduce((sum, r) => sum + (r.hit_count || 0), 0) }}</span>
+      </div>
+      <div class="print-footer">
+        <span>拣货人：_______________</span>
+        <span>核对人：_______________</span>
+        <span>日期：_______________</span>
+      </div>
     </div>
+
 
     <!-- 明细核对表 -->
     <div class="card no-print" v-if="filterResult">
